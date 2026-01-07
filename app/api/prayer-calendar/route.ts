@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Fetch prayer times for the next 30 days
-    const prayerTimes = await fetchPrayerTimes(
+    const { prayerTimes, timezone } = await fetchPrayerTimes(
       latitude,
       longitude,
       calculationMethod,
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     );
 
     // Generate iCal format
-    const icsContent = generateICS(prayerTimes);
+    const icsContent = generateICS(prayerTimes, timezone);
 
     // Return as .ics file
     return new NextResponse(icsContent, {

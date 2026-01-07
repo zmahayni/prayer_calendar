@@ -11,12 +11,17 @@ export interface DailyPrayerTimes {
   prayers: PrayerTimes;
 }
 
+export interface PrayerTimesResponse {
+  prayerTimes: DailyPrayerTimes[];
+  timezone: string;
+}
+
 export async function fetchPrayerTimes(
   lat: number,
   lng: number,
   method: number,
   days: number = 30
-): Promise<DailyPrayerTimes[]> {
+): Promise<PrayerTimesResponse> {
   const today = new Date();
   const currentMonth = today.getMonth() + 1;
   const currentYear = today.getFullYear();
@@ -40,11 +45,14 @@ export async function fetchPrayerTimes(
   }
   const data2 = await response2.json();
 
+  // Get timezone from the first response
+  const timezone = data1.data[0]?.meta?.timezone || 'UTC';
+
   // Combine both months
   const allDays = [...data1.data, ...data2.data];
 
   // Filter to get only the next 30 days starting from today
-  const results: DailyPrayerTimes[] = [];
+  const prayerTimes: DailyPrayerTimes[] = [];
   const todayTimestamp = today.setHours(0, 0, 0, 0);
 
   for (let i = 0; i < days && i < allDays.length; i++) {
@@ -62,7 +70,7 @@ export async function fetchPrayerTimes(
 
     const dateStr = dayData.date.gregorian.date.split('-').reverse().join('-'); // Convert DD-MM-YYYY to YYYY-MM-DD
 
-    results.push({
+    prayerTimes.push({
       date: dateStr,
       prayers: {
         Fajr: cleanTime(timings.Fajr),
@@ -74,7 +82,7 @@ export async function fetchPrayerTimes(
     });
   }
 
-  return results;
+  return { prayerTimes, timezone };
 }
 
 export const CALCULATION_METHODS = {

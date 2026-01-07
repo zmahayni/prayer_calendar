@@ -4,8 +4,10 @@ import { useState } from "react";
 import { CALCULATION_METHODS } from "@/lib/aladhan";
 
 export default function Home() {
+  const [city, setCity] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  const [locationName, setLocationName] = useState("");
   const [method, setMethod] = useState("2");
   const [subscriptionUrl, setSubscriptionUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -14,14 +16,30 @@ export default function Home() {
     setLoading(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLatitude(position.coords.latitude.toFixed(6));
-          setLongitude(position.coords.longitude.toFixed(6));
+        async (position) => {
+          const lat = position.coords.latitude.toFixed(6);
+          const lng = position.coords.longitude.toFixed(6);
+          setLatitude(lat);
+          setLongitude(lng);
+
+          // Reverse geocode to get city name
+          try {
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+            );
+            const data = await response.json();
+            const name = data.address.city || data.address.town || data.address.village || data.display_name;
+            setLocationName(name);
+            setCity(name);
+          } catch (error) {
+            console.error("Error getting city name:", error);
+            setLocationName(`${lat}, ${lng}`);
+          }
           setLoading(false);
         },
         (error) => {
           console.error("Error getting location:", error);
-          alert("Could not get your location. Please enter it manually.");
+          alert("Could not get your location. Please search for a city.");
           setLoading(false);
         }
       );
@@ -31,14 +49,48 @@ export default function Home() {
     }
   };
 
+  const handleCitySearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!city.trim()) {
+      alert("Please enter a city name");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`
+      );
+      const data = await response.json();
+
+      if (data && data.length > 0) {
+        setLatitude(parseFloat(data[0].lat).toFixed(6));
+        setLongitude(parseFloat(data[0].lon).toFixed(6));
+        setLocationName(data[0].display_name);
+      } else {
+        alert("City not found. Please try a different search.");
+      }
+    } catch (error) {
+      console.error("Error searching for city:", error);
+      alert("Failed to search for city. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleGenerateLink = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!latitude || !longitude) {
+      alert("Please select a location first");
+      return;
+    }
 
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
 
     if (isNaN(lat) || isNaN(lng)) {
-      alert("Please enter valid latitude and longitude");
+      alert("Invalid location coordinates");
       return;
     }
 
@@ -88,28 +140,38 @@ export default function Home() {
               >
                 {loading ? "Getting location..." : "Use My Current Location"}
               </button>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <input
-                    type="text"
-                    placeholder="Latitude"
-                    value={latitude}
-                    onChange={(e) => setLatitude(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <input
-                    type="text"
-                    placeholder="Longitude"
-                    value={longitude}
-                    onChange={(e) => setLongitude(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
+
+              <div className="text-center text-gray-500 text-sm mb-3">or</div>
+
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  placeholder="Search for a city..."
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleCitySearch(e);
+                    }
+                  }}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleCitySearch}
+                  disabled={loading}
+                  className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 disabled:bg-gray-400 transition-colors"
+                >
+                  Search
+                </button>
               </div>
+
+              {locationName && (
+                <div className="bg-green-50 border border-green-200 rounded-md p-3 text-sm text-green-800">
+                  <strong>Selected location:</strong> {locationName}
+                </div>
+              )}
             </div>
 
             <div className="mb-6">

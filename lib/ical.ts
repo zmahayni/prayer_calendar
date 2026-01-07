@@ -1,11 +1,19 @@
 import { DailyPrayerTimes } from "./aladhan";
 
-function formatDate(dateStr: string, time: string): string {
+function formatDateWithTimezone(dateStr: string, time: string, timezone: string): string {
   // Parse date (YYYY-MM-DD) and time (HH:MM)
   const [year, month, day] = dateStr.split('-');
   const [hours, minutes] = time.split(':');
 
-  // Create UTC date string in iCal format: YYYYMMDDTHHmmSSZ
+  // Format as YYYYMMDDTHHMMSS (local time, not UTC)
+  return `${year}${month}${day}T${hours}${minutes}00`;
+}
+
+function addMinutes(dateStr: string, time: string, minutesToAdd: number): string {
+  // Parse date (YYYY-MM-DD) and time (HH:MM)
+  const [year, month, day] = dateStr.split('-');
+  const [hours, minutes] = time.split(':');
+
   const date = new Date(
     parseInt(year),
     parseInt(month) - 1,
@@ -14,7 +22,8 @@ function formatDate(dateStr: string, time: string): string {
     parseInt(minutes)
   );
 
-  // Format as YYYYMMDDTHHMMSS
+  date.setMinutes(date.getMinutes() + minutesToAdd);
+
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
@@ -28,7 +37,7 @@ function generateUID(date: string, prayer: string): string {
   return `${date}-${prayer}@prayer-calendar`;
 }
 
-export function generateICS(prayerTimesData: DailyPrayerTimes[]): string {
+export function generateICS(prayerTimesData: DailyPrayerTimes[], timezone: string): string {
   const now = new Date();
   const timestamp = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 
@@ -39,20 +48,22 @@ export function generateICS(prayerTimesData: DailyPrayerTimes[]): string {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'X-WR-CALNAME:Prayer Times',
-    'X-WR-TIMEZONE:UTC',
+    `X-WR-TIMEZONE:${timezone}`,
     'X-WR-CALDESC:Daily Islamic Prayer Times',
   ];
 
   prayerTimesData.forEach(({ date, prayers }) => {
     Object.entries(prayers).forEach(([prayerName, prayerTime]) => {
-      const dtstart = formatDate(date, prayerTime);
+      const dtstart = formatDateWithTimezone(date, prayerTime, timezone);
+      const dtend = addMinutes(date, prayerTime, 5); // 5 minute duration
       const uid = generateUID(date, prayerName);
 
       ics.push(
         'BEGIN:VEVENT',
         `UID:${uid}`,
         `DTSTAMP:${timestamp}`,
-        `DTSTART:${dtstart}`,
+        `DTSTART;TZID=${timezone}:${dtstart}`,
+        `DTEND;TZID=${timezone}:${dtend}`,
         `SUMMARY:${prayerName}`,
         `DESCRIPTION:${prayerName} prayer time`,
         'STATUS:CONFIRMED',
