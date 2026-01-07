@@ -17,35 +17,59 @@ export async function fetchPrayerTimes(
   method: number,
   days: number = 30
 ): Promise<DailyPrayerTimes[]> {
-  const results: DailyPrayerTimes[] = [];
   const today = new Date();
+  const currentMonth = today.getMonth() + 1;
+  const currentYear = today.getFullYear();
+  const currentDay = today.getDate();
 
-  for (let i = 0; i < days; i++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() + i);
+  // Fetch current month
+  const url1 = `https://api.aladhan.com/v1/calendar/${currentYear}/${currentMonth}?latitude=${lat}&longitude=${lng}&method=${method}`;
+  const response1 = await fetch(url1);
+  if (!response1.ok) {
+    throw new Error(`Failed to fetch prayer times for ${currentMonth}/${currentYear}`);
+  }
+  const data1 = await response1.json();
 
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
+  // Fetch next month to ensure we have 30 days
+  const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+  const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+  const url2 = `https://api.aladhan.com/v1/calendar/${nextYear}/${nextMonth}?latitude=${lat}&longitude=${lng}&method=${method}`;
+  const response2 = await fetch(url2);
+  if (!response2.ok) {
+    throw new Error(`Failed to fetch prayer times for ${nextMonth}/${nextYear}`);
+  }
+  const data2 = await response2.json();
 
-    const url = `https://api.aladhan.com/v1/timings/${day}-${month}-${year}?latitude=${lat}&longitude=${lng}&method=${method}`;
+  // Combine both months
+  const allDays = [...data1.data, ...data2.data];
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch prayer times for ${day}-${month}-${year}`);
-    }
+  // Filter to get only the next 30 days starting from today
+  const results: DailyPrayerTimes[] = [];
+  const todayTimestamp = today.setHours(0, 0, 0, 0);
 
-    const data = await response.json();
-    const timings = data.data.timings;
+  for (let i = 0; i < days && i < allDays.length; i++) {
+    const dayData = allDays.find((d: any) => {
+      const dayDate = new Date(d.date.gregorian.date.split('-').reverse().join('-'));
+      const targetDate = new Date(today);
+      targetDate.setDate(today.getDate() + i);
+      return dayDate.toDateString() === targetDate.toDateString();
+    });
+
+    if (!dayData) continue;
+
+    const timings = dayData.timings;
+    const cleanTime = (time: string) => time.split(' ')[0]; // Remove timezone suffix
+
+    const dateStr = dayData.date.gregorian.date.split('-').reverse().join('-'); // Convert DD-MM-YYYY to YYYY-MM-DD
 
     results.push({
-      date: `${year}-${month}-${day}`,
+      date: dateStr,
       prayers: {
-        Fajr: timings.Fajr,
-        Dhuhr: timings.Dhuhr,
-        Asr: timings.Asr,
-        Maghrib: timings.Maghrib,
-        Isha: timings.Isha,
+        Fajr: cleanTime(timings.Fajr),
+        Dhuhr: cleanTime(timings.Dhuhr),
+        Asr: cleanTime(timings.Asr),
+        Maghrib: cleanTime(timings.Maghrib),
+        Isha: cleanTime(timings.Isha),
       },
     });
   }
